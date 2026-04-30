@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../common/utils/app_colors.dart';
-import '../../../common/widgets/app_logo_widget.dart';
 import '../../../routes/app_routes.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -36,9 +35,12 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Scan skincare with confidence',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+              const Center(
+                child: Text(
+                  'Scan skincare with confidence',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                ),
               ),
               const SizedBox(height: 10),
               const Text(

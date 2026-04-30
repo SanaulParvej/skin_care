@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../common/utils/app_colors.dart';
+import '../../../common/widgets/app_logo_widget.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -32,7 +33,7 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 24),
             const Center(
               child: Text(
-                'Made with care for safer skincare\n© 2024 Skincare Safety. All rights reserved.',
+                'Made with care for safer skincare\n© 2026 Skincare Safety. All rights reserved.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: AppColors.subText),
               ),
@@ -67,6 +68,7 @@ class _AboutHeroCard extends StatelessWidget {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(24),
             ),
+            child: const Center(child: AppLogoWidget(size: 42)),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -192,7 +194,7 @@ class _ProjectInfoCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 12),
-            _InfoRow(label: 'Project Type', value: 'Final Year Project'),
+            _InfoRow(label: 'Project Type', value: 'Defence Project'),
             _InfoRow(label: 'Technology', value: 'AI & Machine Learning'),
             _InfoRow(label: 'Purpose', value: 'Consumer Safety'),
             _InfoRow(label: 'Platform', value: 'Mobile Application'),
@@ -240,7 +242,7 @@ class _SupportCard extends StatelessWidget {
             const SizedBox(height: 12),
             _SupportTile(
               title: 'Email Support',
-              subtitle: 'support@skincaresafety.com',
+              subtitle: 'smperves12@gmail.com',
               color: AppColors.mint,
             ),
             const SizedBox(height: 10),

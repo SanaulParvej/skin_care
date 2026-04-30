@@ -45,5 +45,11 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Take photos of product labels for ingredient safety scan.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select product photos from your library for ingredient safety scan.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow saving scanned product images if needed.</string>
 </dict>
 </plist>

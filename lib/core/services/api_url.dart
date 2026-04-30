@@ -1,8 +1,7 @@
 class ApiUrl {
   ApiUrl._();
 
-  static const String baseUrl = 'https://api.example.com';
-  static const String login = '$baseUrl/auth/login';
-  static const String register = '$baseUrl/auth/register';
+  // Live API endpoint
+  static const String baseUrl = 'https://skincare-api-4ruo.onrender.com';
   static const String scan = '$baseUrl/scan';
 }

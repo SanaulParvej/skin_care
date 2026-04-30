@@ -31,12 +31,17 @@ class _MainBottomNavState extends State<MainBottomNav> {
           return Container(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              gradient: const LinearGradient(
+                colors: [Colors.white, Color(0xFFF7FCFB)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 18,
+                  offset: const Offset(0, -4),
                 ),
               ],
             ),
@@ -147,7 +152,7 @@ class _CenterNavButton extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 4),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(0.4),
+              color: AppColors.primary.withValues(alpha: 0.35),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
