@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../../common/utils/app_colors.dart';
-import '../../../core/services/network_caller.dart';
 import 'package:image_picker/image_picker.dart';
 import '../controller/scan_history_controller.dart';
+import '../controller/product_scan_controller.dart';
 
 class SwapScreen extends StatefulWidget {
   const SwapScreen({super.key});
@@ -15,136 +15,283 @@ class SwapScreen extends StatefulWidget {
 class _SwapScreenState extends State<SwapScreen> {
   File? _selectedImage;
   bool _isLoading = false;
+  String? _scanStatus;
+  int? _scanScore;
+  List<String> _harmfulIngredients = [];
+  String? _scanError;
 
-  Future<void> _pickAndScanImage(
-    BuildContext context,
-    ImageSource source,
-  ) async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: source, imageQuality: 80);
 
     if (picked != null) {
       setState(() {
         _selectedImage = File(picked.path);
-        _isLoading = true;
+        _scanStatus = null;
+        _scanScore = null;
+        _harmfulIngredients = [];
+        _scanError = null;
       });
-
-      try {
-        // Use file upload instead of base64
-        final response = await NetworkCaller.scanImageFile(
-          imageFile: _selectedImage!,
-        );
-
-        setState(() {
-          _isLoading = false;
-        });
-
-        if (response.isSuccess && response.data != null) {
-          if (response.data is Map<String, dynamic>) {
-            final data = response.data as Map<String, dynamic>;
-            ScanHistoryController.instance.addScanResult(
-              status: (data['status'] ?? 'SAFE').toString(),
-              harmfulFound: (data['harmful_found'] as List<dynamic>? ?? []),
-            );
-          }
-
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('✅ Scan Result'),
-              content: SingleChildScrollView(
-                child: Text(response.data.toString()),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('❌ Error'),
-              content: Text(response.errorMessage ?? 'Unknown error occurred'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-      } catch (e) {
-        setState(() {
-          _isLoading = false;
-        });
-
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('❌ Error'),
-            content: Text('Failed to scan image: $e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
     }
   }
 
-  void _showImageSourceSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Wrap(
+  Future<void> _scanSelectedImage() async {
+    if (_selectedImage == null || _isLoading) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _scanError = null;
+    });
+
+    try {
+      final response = await ProductScanController.instance.scanFromImage(
+        _selectedImage!,
+      );
+      final parsed = response.data;
+
+      if (response.isSuccess && parsed != null) {
+        setState(() {
+          _isLoading = false;
+          _scanStatus = parsed.status;
+          _scanScore = parsed.riskScore;
+          _harmfulIngredients = parsed.harmfulFound;
+          _scanError = null;
+        });
+
+        ScanHistoryController.instance.addScanResult(
+          status: parsed.status,
+          harmfulFound: parsed.harmfulFound,
+          score: parsed.riskScore,
+        );
+      } else {
+        setState(() {
+          _isLoading = false;
+          _scanStatus = null;
+          _scanScore = null;
+          _harmfulIngredients = [];
+          _scanError = response.errorMessage ?? 'Unknown error occurred';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _scanStatus = null;
+        _scanScore = null;
+        _harmfulIngredients = [];
+        _scanError = 'Failed to scan image: $e';
+      });
+    }
+  }
+
+  Widget _buildScanButton() {
+    if (_selectedImage == null) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: _isLoading ? null : _scanSelectedImage,
+        icon: _isLoading
+            ? const SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.document_scanner_outlined),
+        label: Text(_isLoading ? 'Scanning...' : 'Scan'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScanResultCard() {
+    if (_scanError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.orangeLight,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+            const Icon(Icons.error_outline_rounded, color: AppColors.warning),
+            const SizedBox(width: 10),
+            Expanded(
               child: Text(
-                'Choose Image Source',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.mintLight,
-                  borderRadius: BorderRadius.circular(12),
+                _scanError!,
+                style: const TextStyle(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w600,
                 ),
-                child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
               ),
-              title: const Text('Take Photo'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickAndScanImage(context, ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.purpleLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.photo_library_rounded, color: AppColors.purple),
-              ),
-              title: const Text('From Gallery'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickAndScanImage(context, ImageSource.gallery);
-              },
             ),
           ],
         ),
+      );
+    }
+
+    if (_scanStatus == null) {
+      return const SizedBox.shrink();
+    }
+
+    final normalized = _normalizedStatus(_scanStatus!);
+    final isSafe = normalized == 'SAFE';
+    final isHighRisk = normalized == 'HIGH RISK';
+    final baseColor = isSafe
+        ? AppColors.safe
+        : isHighRisk
+        ? AppColors.risky
+        : AppColors.warning;
+    final title = isSafe
+        ? 'Safe Product'
+        : isHighRisk
+        ? 'High Risk Product'
+        : 'Caution Product';
+    final subtitle = isSafe
+        ? 'No harmful ingredients were detected in this scan.'
+        : isHighRisk
+        ? 'Potentially harmful ingredients were found.'
+        : 'Some ingredients need caution.';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [baseColor.withValues(alpha: 0.12), Colors.white],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: baseColor.withValues(alpha: 0.35),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                height: 44,
+                width: 44,
+                decoration: BoxDecoration(
+                  color: baseColor.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isSafe
+                      ? Icons.verified_rounded
+                      : isHighRisk
+                      ? Icons.warning_amber_rounded
+                      : Icons.info_outline_rounded,
+                  color: baseColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: AppColors.subText),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: baseColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              'Risk score: ${_scanScore ?? 0}/100',
+              style: TextStyle(color: baseColor, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Ingredients detected',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          if (_harmfulIngredients.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Text(
+                'No flagged ingredients found.',
+                style: TextStyle(
+                  color: AppColors.subText,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _harmfulIngredients
+                  .map(
+                    (ingredient) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: baseColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        ingredient,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+        ],
       ),
     );
   }
@@ -220,7 +367,9 @@ class _SwapScreenState extends State<SwapScreen> {
                                   height: 70,
                                   width: 70,
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: const Icon(
@@ -256,7 +405,7 @@ class _SwapScreenState extends State<SwapScreen> {
                             iconColor: AppColors.primary,
                             onTap: _isLoading
                                 ? null
-                                : () => _showImageSourceSheet(context),
+                                : () => _pickImage(ImageSource.camera),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -268,11 +417,17 @@ class _SwapScreenState extends State<SwapScreen> {
                             iconColor: AppColors.purple,
                             onTap: _isLoading
                                 ? null
-                                : () => _showImageSourceSheet(context),
+                                : () => _pickImage(ImageSource.gallery),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    _buildScanButton(),
+                    if (_scanStatus != null || _scanError != null) ...[
+                      const SizedBox(height: 14),
+                      _buildScanResultCard(),
+                    ],
                   ],
                 ),
               ),
@@ -342,6 +497,23 @@ class _SwapScreenState extends State<SwapScreen> {
       ),
     );
   }
+}
+
+String _normalizedStatus(String status) {
+  final normalized = status.trim().toUpperCase();
+  if (normalized.contains('SAFE')) {
+    return 'SAFE';
+  }
+  if (normalized.contains('LOW')) {
+    return 'LOW RISK';
+  }
+  if (normalized.contains('MEDIUM')) {
+    return 'MEDIUM RISK';
+  }
+  if (normalized.contains('HIGH') || normalized.contains('RISKY')) {
+    return 'HIGH RISK';
+  }
+  return 'UNKNOWN';
 }
 
 class _ActionButton extends StatelessWidget {

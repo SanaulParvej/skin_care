@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../../common/utils/app_colors.dart';
-import '../../../core/services/network_caller.dart';
 import '../controller/scan_history_controller.dart';
+import '../controller/product_scan_controller.dart';
+import 'scan_history_page.dart';
 
 class ModuleSelectionScreen extends StatefulWidget {
   const ModuleSelectionScreen({super.key});
@@ -13,7 +14,8 @@ class ModuleSelectionScreen extends StatefulWidget {
 }
 
 class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
-  final ScanHistoryController _historyController = ScanHistoryController.instance;
+  final ScanHistoryController _historyController =
+      ScanHistoryController.instance;
 
   Future<void> _pickAndScanImage(
     BuildContext context,
@@ -32,9 +34,10 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
-    final response = await NetworkCaller.scanImageFile(
-      imageFile: File(picked.path),
+    final response = await ProductScanController.instance.scanFromImage(
+      File(picked.path),
     );
+    final scanResult = response.data;
 
     if (!context.mounted) return;
     Navigator.of(context).pop();
@@ -43,13 +46,37 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(response.isSuccess ? 'Scan Result' : 'Error'),
-        content: SingleChildScrollView(
-          child: Text(
-            response.isSuccess
-                ? response.data.toString()
-                : (response.errorMessage ?? 'Unknown error occurred'),
-          ),
-        ),
+        content: response.isSuccess && scanResult != null
+            ? SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _statusLabel(scanResult.status),
+                      style: TextStyle(
+                        color: _statusColor(scanResult.status),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Risk score: ${scanResult.riskScore}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      scanResult.harmfulFound.isEmpty
+                          ? 'No harmful ingredients found.'
+                          : 'Harmful ingredients: ${scanResult.harmfulFound.join(', ')}',
+                    ),
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                child: Text(response.errorMessage ?? 'Unknown error occurred'),
+              ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -59,11 +86,11 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
       ),
     );
 
-    if (response.isSuccess && response.data is Map<String, dynamic>) {
-      final data = response.data as Map<String, dynamic>;
+    if (response.isSuccess && scanResult != null) {
       _historyController.addScanResult(
-        status: (data['status'] ?? 'SAFE').toString(),
-        harmfulFound: (data['harmful_found'] as List<dynamic>? ?? []),
+        status: scanResult.status,
+        harmfulFound: scanResult.harmfulFound,
+        score: scanResult.riskScore,
       );
     }
   }
@@ -88,7 +115,10 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
                   color: AppColors.mintLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: AppColors.primary,
+                ),
               ),
               title: const Text('Take Photo'),
               onTap: () {
@@ -103,7 +133,10 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
                   color: AppColors.purpleLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.photo_library_rounded, color: AppColors.purple),
+                child: const Icon(
+                  Icons.photo_library_rounded,
+                  color: AppColors.purple,
+                ),
               ),
               title: const Text('From Gallery'),
               onTap: () {
@@ -129,7 +162,9 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: _DashboardHeader(riskyCount: _historyController.riskyCount),
+                  child: _DashboardHeader(
+                    riskyCount: _historyController.riskyCount,
+                  ),
                 ),
               ),
               SliverToBoxAdapter(
@@ -147,6 +182,13 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                   child: _QuickActions(
                     onNewScanTap: () => _showImageSourceSheet(context),
+                    onHistoryTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ScanHistoryPage(),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -175,7 +217,8 @@ class _ModuleSelectionScreenState extends State<ModuleSelectionScreen> {
                       )
                     : SliverList(
                         delegate: SliverChildBuilderDelegate(
-                          (context, index) => _RecentScanTile(item: items[index]),
+                          (context, index) =>
+                              _RecentScanTile(item: items[index]),
                           childCount: items.length,
                         ),
                       ),
@@ -422,9 +465,10 @@ class _StatCard extends StatelessWidget {
 }
 
 class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.onNewScanTap});
+  const _QuickActions({required this.onNewScanTap, required this.onHistoryTap});
 
   final VoidCallback onNewScanTap;
+  final VoidCallback onHistoryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -455,11 +499,7 @@ class _QuickActions extends StatelessWidget {
                     label: 'History',
                     color: AppColors.purpleLight,
                     iconColor: AppColors.purple,
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('History coming soon')),
-                      );
-                    },
+                    onTap: onHistoryTap,
                   ),
                 ),
               ],
@@ -541,14 +581,177 @@ class _RecentScanTile extends StatelessWidget {
 
   final ScanHistoryItem item;
 
+  void _showScanDetails(BuildContext context) {
+    final statusColor = _statusColor(item.status);
+    final normalizedStatus = _normalizedStatus(item.status);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    height: 5,
+                    width: 48,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  item.name,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Scanned on ${item.date}',
+                  style: const TextStyle(color: AppColors.subText),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        statusColor.withValues(alpha: 0.14),
+                        Colors.white,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        normalizedStatus == 'SAFE'
+                            ? Icons.verified_rounded
+                            : normalizedStatus == 'HIGH RISK'
+                            ? Icons.warning_amber_rounded
+                            : normalizedStatus == 'LOW RISK' ||
+                                  normalizedStatus == 'MEDIUM RISK'
+                            ? Icons.info_outline_rounded
+                            : Icons.warning_amber_rounded,
+                        color: statusColor,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _statusMessage(item.status),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Detected Ingredients',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                if (item.ingredients.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'No flagged ingredients were stored for this scan.',
+                      style: TextStyle(
+                        color: AppColors.subText,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: item.ingredients
+                        .map(
+                          (ingredient) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: statusColor.withValues(alpha: 0.28),
+                              ),
+                            ),
+                            child: Text(
+                              ingredient,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: Text(
+                    'Verdict: ${_statusLabel(item.status)}',
+                    style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isSafe = item.status.toLowerCase() == 'safe';
-    final color = isSafe ? AppColors.safe : AppColors.risky;
+    final color = _statusColor(item.status);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Card(
         child: ListTile(
+          onTap: () => _showScanDetails(context),
           leading: Container(
             height: 44,
             width: 44,
@@ -568,13 +771,10 @@ class _RecentScanTile extends StatelessWidget {
             children: [
               Text(
                 '${item.score}/100',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
+                style: TextStyle(fontWeight: FontWeight.w700, color: color),
               ),
               Text(
-                item.status,
+                _statusLabel(item.status),
                 style: TextStyle(color: color, fontSize: 12),
               ),
             ],
@@ -583,4 +783,65 @@ class _RecentScanTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _statusLabel(String status) {
+  switch (_normalizedStatus(status)) {
+    case 'SAFE':
+      return 'Safe';
+    case 'LOW RISK':
+      return 'Low Risk';
+    case 'MEDIUM RISK':
+      return 'Medium Risk';
+    case 'HIGH RISK':
+      return 'High Risk';
+    default:
+      return 'Unknown';
+  }
+}
+
+Color _statusColor(String status) {
+  switch (_normalizedStatus(status)) {
+    case 'SAFE':
+      return AppColors.safe;
+    case 'LOW RISK':
+    case 'MEDIUM RISK':
+      return AppColors.warning;
+    case 'HIGH RISK':
+      return AppColors.risky;
+    default:
+      return AppColors.primary;
+  }
+}
+
+String _statusMessage(String status) {
+  switch (_normalizedStatus(status)) {
+    case 'SAFE':
+      return 'Looks safe';
+    case 'LOW RISK':
+      return 'Low risk found';
+    case 'MEDIUM RISK':
+      return 'Use with caution';
+    case 'HIGH RISK':
+      return 'Potential risk';
+    default:
+      return 'Scan result';
+  }
+}
+
+String _normalizedStatus(String status) {
+  final normalized = status.trim().toUpperCase();
+  if (normalized.contains('SAFE')) {
+    return 'SAFE';
+  }
+  if (normalized.contains('LOW')) {
+    return 'LOW RISK';
+  }
+  if (normalized.contains('MEDIUM')) {
+    return 'MEDIUM RISK';
+  }
+  if (normalized.contains('HIGH') || normalized.contains('RISKY')) {
+    return 'HIGH RISK';
+  }
+  return 'UNKNOWN';
 }
